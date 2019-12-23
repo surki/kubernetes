@@ -219,6 +219,7 @@ func getSoftTopologySpreadConstraints(pod *v1.Pod) (constraints []v1.TopologySpr
 				}
 
 				if tc.WhenUnsatisfiable == v1.ScheduleAnyway {
+					klog.Infof("Freshworks scheduler: adding soft constraint: %v", tc)
 					constraints = append(constraints, tc)
 				}
 			}
