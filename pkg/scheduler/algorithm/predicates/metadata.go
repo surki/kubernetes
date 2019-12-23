@@ -18,6 +18,7 @@ package predicates
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -336,11 +337,22 @@ func getHardTopologySpreadConstraints(pod *v1.Pod) (constraints []v1.TopologySpr
 		}
 
 		if len(constraints) <= 0 {
-			if _, ok := pod.Annotations["freshworks.scheduler/whenUnsatisfiable"]; ok {
-				constraints = getConstraintsFromAnnotation(pod)
+			if v, ok := pod.Annotations["freshworks.scheduler/topologySpreadConstraints"]; ok {
+				var tc v1.TopologySpreadConstraint
+
+				err := json.Unmarshal([]byte(v), &tc)
+				if err != nil {
+					klog.Errorf("Error decoding freshworks.scheduler/topologySpreadConstraints: %v", err)
+					return
+				}
+
+				if tc.WhenUnsatisfiable == v1.DoNotSchedule {
+					constraints = append(constraints, tc)
+				}
 			}
 		}
 	}
+
 	return
 }
 
@@ -844,7 +856,7 @@ func getConstraintsFromAnnotation(pod *v1.Pod) (constraints []v1.TopologySpreadC
 				return
 			}
 
-			ls.MatchLabels[kv[0]] = kv[1]
+			ls.MatchLabels[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 		}
 
 		constraint.LabelSelector = ls

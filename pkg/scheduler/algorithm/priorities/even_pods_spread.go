@@ -18,6 +18,7 @@ package priorities
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"strconv"
 	"strings"
@@ -208,8 +209,18 @@ func getSoftTopologySpreadConstraints(pod *v1.Pod) (constraints []v1.TopologySpr
 		}
 
 		if len(constraints) <= 0 {
-			if _, ok := pod.Annotations["freshworks.scheduler/whenUnsatisfiable"]; ok {
-				constraints = getConstraintsFromAnnotation(pod)
+			if v, ok := pod.Annotations["freshworks.scheduler/topologySpreadConstraints"]; ok {
+				var tc v1.TopologySpreadConstraint
+
+				err := json.Unmarshal([]byte(v), &tc)
+				if err != nil {
+					klog.Errorf("Error decoding freshworks.scheduler/topologySpreadConstraints: %v", err)
+					return
+				}
+
+				if tc.WhenUnsatisfiable == v1.ScheduleAnyway {
+					constraints = append(constraints, tc)
+				}
 			}
 		}
 	}
