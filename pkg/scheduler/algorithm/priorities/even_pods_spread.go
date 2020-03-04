@@ -20,12 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
@@ -210,78 +207,23 @@ func getSoftTopologySpreadConstraints(pod *v1.Pod) (constraints []v1.TopologySpr
 
 		if len(constraints) <= 0 {
 			if v, ok := pod.Annotations["freshworks.scheduler/topologySpreadConstraints"]; ok {
-				var tc v1.TopologySpreadConstraint
+				var tcs []v1.TopologySpreadConstraint
 
-				err := json.Unmarshal([]byte(v), &tc)
+				err := json.Unmarshal([]byte(v), &tcs)
 				if err != nil {
 					klog.Errorf("Error decoding freshworks.scheduler/topologySpreadConstraints: %v", err)
 					return
 				}
 
-				if tc.WhenUnsatisfiable == v1.ScheduleAnyway {
-					klog.Infof("Freshworks scheduler: adding soft constraint: %v", tc)
-					constraints = append(constraints, tc)
+				for _, c := range tcs {
+					if c.WhenUnsatisfiable == v1.ScheduleAnyway {
+						klog.Infof("Freshworks scheduler: adding soft constraint: %v", c)
+						constraints = append(constraints, c)
+					}
 				}
 			}
 		}
 	}
-
-	return
-}
-
-func getConstraintsFromAnnotation(pod *v1.Pod) (constraints []v1.TopologySpreadConstraint) {
-	// freshworks.scheduler/whenUnsatisfiable: ScheduleAnyway
-	// freshworks.scheduler/maxSkew: 1
-	// freshworks.scheduler/topologyKey: failure-domain.beta.kubernetes.io/zone
-	// freshworks.scheduler/matchLabels: "app: busybox"
-
-	var constraint v1.TopologySpreadConstraint
-
-	constraint.MaxSkew = 1
-	if v, ok := pod.Annotations["freshworks.scheduler/maxSkew"]; ok {
-		i, err := strconv.ParseInt(v, 10, 32)
-		if err != nil {
-			klog.Errorf("%v %v: FW EvenPodsSpreadPriority, Error: %v", pod.Name, "freshworks.scheduler/maxSkew", err)
-			return
-		}
-		constraint.MaxSkew = int32(i)
-	}
-
-	if v, ok := pod.Annotations["freshworks.scheduler/topologyKey"]; ok {
-		constraint.TopologyKey = v
-	} else {
-		klog.Errorf("%v %v: FW EvenPodsSpreadPriority, Error topology annotation not found", pod.Name, "freshworks.scheduler/topologyKey")
-		return
-	}
-
-	// TODO: Support matchExpressions
-	if v, ok := pod.Annotations["freshworks.scheduler/matchLabels"]; ok {
-		ls := &metav1.LabelSelector{
-			MatchLabels: map[string]string{},
-		}
-
-		vl := strings.Split(v, ",")
-		if len(vl) == 0 {
-			klog.Errorf("%v %v: FW EvenPodsSpreadPriority, Error label selector annotation empty", pod.Name, "freshworks.scheduler/labelSelector/matchLabels")
-			return
-		}
-		for _, l := range vl {
-			kv := strings.Split(l, ":")
-			if len(kv) != 2 {
-				klog.Errorf("%v %v: FW EvenPodsSpreadPriority, label not in correct format: %v", pod.Name, "freshworks.scheduler/labelSelector/matchLabels")
-				return
-			}
-
-			ls.MatchLabels[kv[0]] = kv[1]
-		}
-
-		constraint.LabelSelector = ls
-	} else {
-		klog.Errorf("%v %v: FW EvenPodsSpreadPriority, Error label selector annotation not found", pod.Name, "freshworks.scheduler/labelSelector")
-		return
-	}
-
-	constraints = append(constraints, constraint)
 
 	return
 }
